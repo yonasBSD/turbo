@@ -13,8 +13,8 @@
     "directory": "packages/turbo-types"
   },
   "files": [
-    "src",
-    "schemas"
+    "schemas",
+    "src"
   ],
   "type": "commonjs",
   "main": "src/index.ts",

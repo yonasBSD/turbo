@@ -6,8 +6,8 @@
   "bugs": "https://github.com/vercel/turborepo/issues",
   "license": "MIT",
   "files": [
-    "dist/index.js",
-    "dist/index.d.ts"
+    "dist/index.d.ts",
+    "dist/index.js"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -6,9 +6,7 @@
     "esModuleInterop": true,
     "incremental": false,
     "outDir": "dist",
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "strictNullChecks": true
   },
   "include": ["src"],
