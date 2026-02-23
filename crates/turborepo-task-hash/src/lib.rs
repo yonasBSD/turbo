@@ -297,11 +297,14 @@ impl<'a, R: RunOptsHashInfo> TaskHasher<'a, R> {
         if self.run_opts.single_package() {
             return;
         }
-        for (name, info) in workspaces {
-            let hash = get_external_deps_hash(&info.transitive_dependencies);
-            self.external_deps_hash_cache
-                .insert(name.as_str().to_owned(), hash);
-        }
+        let ws: Vec<_> = workspaces.collect();
+        self.external_deps_hash_cache = ws
+            .par_iter()
+            .map(|(name, info)| {
+                let hash = get_external_deps_hash(&info.transitive_dependencies);
+                (name.as_str().to_owned(), hash)
+            })
+            .collect();
     }
 
     #[tracing::instrument(skip(self, task_definition, task_env_mode, workspace, dependency_set))]
@@ -311,7 +314,7 @@ impl<'a, R: RunOptsHashInfo> TaskHasher<'a, R> {
         task_definition: &T,
         task_env_mode: EnvMode,
         workspace: &PackageInfo,
-        dependency_set: HashSet<&TaskNode>,
+        dependency_set: &[&TaskNode],
         telemetry: PackageTaskEventBuilder,
     ) -> Result<String, Error> {
         let do_framework_inference = self.run_opts.framework_inference();
@@ -453,7 +456,7 @@ impl<'a, R: RunOptsHashInfo> TaskHasher<'a, R> {
     /// returns: Result<Vec<String, Global>, Error>
     fn calculate_dependency_hashes(
         &self,
-        dependency_set: HashSet<&TaskNode>,
+        dependency_set: &[&TaskNode],
     ) -> Result<Vec<Arc<str>>, Error> {
         let state = self
             .task_hash_tracker
@@ -462,7 +465,7 @@ impl<'a, R: RunOptsHashInfo> TaskHasher<'a, R> {
             .expect("hash tracker rwlock poisoned");
 
         let mut dependency_hash_list: Vec<Arc<str>> = Vec::with_capacity(dependency_set.len());
-        for dependency_task in &dependency_set {
+        for dependency_task in dependency_set {
             let TaskNode::Task(dependency_task_id) = dependency_task else {
                 continue;
             };
