@@ -3,7 +3,7 @@ use rayon::prelude::*;
 use tracing::debug;
 use turbopath::{AbsoluteSystemPath, AnchoredSystemPathBuf, RelativeUnixPath, RelativeUnixPathBuf};
 
-use crate::{Error, GitHashes};
+use crate::{Error, GitHashes, OidHash};
 
 const MAX_RETRIES: u32 = 10;
 const BASE_DELAY_MS: u64 = 10;
@@ -46,7 +46,7 @@ pub(crate) fn hash_objects(
     let pkg_prefix = git_root.anchor(pkg_path).ok().map(|a| a.to_unix());
 
     hashes.reserve(to_hash.len());
-    let results: Vec<Result<Option<(RelativeUnixPathBuf, String)>, Error>> = to_hash
+    let results: Vec<Result<Option<(RelativeUnixPathBuf, OidHash)>, Error>> = to_hash
         .into_par_iter()
         .map(|filename| {
             let full_file_path = git_root.join_unix_path(&filename);
@@ -65,9 +65,10 @@ pub(crate) fn hash_objects(
                         });
                     let mut hex_buf = [0u8; 40];
                     hex::encode_to_slice(hash.as_bytes(), &mut hex_buf).unwrap();
-                    // SAFETY: hex output is always valid ASCII
-                    let hash_str = unsafe { std::str::from_utf8_unchecked(&hex_buf) }.to_string();
-                    Ok(Some((package_relative_path, hash_str)))
+                    Ok(Some((
+                        package_relative_path,
+                        OidHash::from_hex_buf(hex_buf),
+                    )))
                 }
                 Err(e) => {
                     if e.class() == git2::ErrorClass::Os
@@ -98,7 +99,7 @@ mod test {
     use turbopath::{AbsoluteSystemPathBuf, RelativeUnixPathBuf, RelativeUnixPathBufTestExt};
 
     use super::hash_objects;
-    use crate::{GitHashes, find_git_root};
+    use crate::{GitHashes, OidHash, find_git_root};
 
     #[test]
     fn test_read_object_hashes() {
@@ -134,9 +135,14 @@ mod test {
         ];
 
         for (to_hash, pkg_path) in tests {
-            let file_hashes: Vec<(RelativeUnixPathBuf, String)> = to_hash
+            let file_hashes: Vec<(RelativeUnixPathBuf, OidHash)> = to_hash
                 .into_iter()
-                .map(|(raw, hash)| (RelativeUnixPathBuf::new(raw).unwrap(), String::from(hash)))
+                .map(|(raw, hash)| {
+                    (
+                        RelativeUnixPathBuf::new(raw).unwrap(),
+                        OidHash::from_hex_str(hash),
+                    )
+                })
                 .collect();
 
             let git_to_pkg_path = git_root.anchor(pkg_path).unwrap();

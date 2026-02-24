@@ -188,7 +188,7 @@ impl PackageInputsHashes {
                     repo_index,
                 )
                 .map(|h| {
-                    let mut v: Vec<_> = h.into_iter().collect();
+                    let mut v: Vec<_> = h.into_iter().map(|(k, v)| (k, String::from(v))).collect();
                     v.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
                     Arc::new(FileHashes(v))
                 })
@@ -577,7 +577,10 @@ pub fn get_internal_deps_hash(
             },
         )?;
 
-    let mut file_hashes: Vec<_> = merged.into_iter().collect();
+    let mut file_hashes: Vec<_> = merged
+        .into_iter()
+        .map(|(k, v)| (k, String::from(v)))
+        .collect();
     file_hashes.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
     Ok(FileHashes(file_hashes).hash())
 }

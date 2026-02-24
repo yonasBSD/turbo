@@ -3,7 +3,9 @@
 use tracing::{debug, trace};
 use turbopath::RelativeUnixPathBuf;
 
-use crate::{Error, GitHashes, GitRepo, ls_tree::SortedGitHashes, status::RepoStatusEntry};
+use crate::{
+    Error, GitHashes, GitRepo, OidHash, ls_tree::SortedGitHashes, status::RepoStatusEntry,
+};
 
 /// Pre-computed repo-wide git index that caches file hashes and working-tree
 /// status so they can be filtered per-package without spawning additional
@@ -152,17 +154,11 @@ impl RepoGitIndex {
                             return Ok(EntryClassification::Modified { path: rel_path });
                         }
 
-                        // Clean: hex-encode the OID using a stack buffer to
-                        // avoid the intermediate HexDisplay allocation from
-                        // to_hex().to_string().
                         let mut hex_buf = [0u8; 40];
                         hex::encode_to_slice(e.id.as_bytes(), &mut hex_buf).unwrap();
-                        // SAFETY: hex output is always valid ASCII/UTF-8.
-                        let oid_str =
-                            unsafe { std::str::from_utf8_unchecked(&hex_buf) }.to_string();
                         Ok(EntryClassification::Clean {
                             path: rel_path,
-                            oid: oid_str,
+                            oid: OidHash::from_hex_buf(hex_buf),
                         })
                     }
                     Err(_) => Ok(EntryClassification::Deleted { path: rel_path }),
@@ -239,7 +235,7 @@ impl RepoGitIndex {
         let mut hashes = if prefix_is_empty {
             let mut h = GitHashes::with_capacity(self.ls_tree_hashes.len());
             for (path, hash) in &self.ls_tree_hashes {
-                h.insert(path.clone(), hash.clone());
+                h.insert(path.clone(), *hash);
             }
             h
         } else {
@@ -252,7 +248,7 @@ impl RepoGitIndex {
             let mut h = GitHashes::with_capacity(hi - lo);
             for (path, hash) in &self.ls_tree_hashes[lo..hi] {
                 if let Ok(stripped) = path.strip_prefix(pkg_prefix) {
-                    h.insert(stripped, hash.clone());
+                    h.insert(stripped, *hash);
                 }
             }
             h
@@ -410,7 +406,7 @@ fn find_untracked_files(
 enum EntryClassification {
     Clean {
         path: RelativeUnixPathBuf,
-        oid: String,
+        oid: OidHash,
     },
     Modified {
         path: RelativeUnixPathBuf,
@@ -432,10 +428,14 @@ mod tests {
         RelativeUnixPathBuf::new(s).unwrap()
     }
 
+    fn pad_hex(s: &str) -> String {
+        format!("{:0<40}", s)
+    }
+
     fn make_index(ls_tree: Vec<(&str, &str)>, status: Vec<(&str, bool)>) -> RepoGitIndex {
         let mut ls_tree_hashes: SortedGitHashes = ls_tree
             .into_iter()
-            .map(|(p, h)| (path(p), h.to_string()))
+            .map(|(p, h)| (path(p), OidHash::from_hex_str(&pad_hex(h))))
             .collect::<Vec<_>>();
         ls_tree_hashes.sort_by(|(a, _), (b, _)| a.cmp(b));
         let mut status_entries: Vec<RepoStatusEntry> = status
@@ -480,8 +480,8 @@ mod tests {
         );
         let (hashes, to_hash) = index.get_package_hashes(&path("apps/web")).unwrap();
         assert_eq!(hashes.len(), 2);
-        assert_eq!(hashes.get(&path("src/index.ts")).unwrap(), "aaa");
-        assert_eq!(hashes.get(&path("package.json")).unwrap(), "bbb");
+        assert_eq!(*hashes.get(&path("src/index.ts")).unwrap(), *pad_hex("aaa"));
+        assert_eq!(*hashes.get(&path("package.json")).unwrap(), *pad_hex("bbb"));
         assert!(to_hash.is_empty());
     }
 
@@ -637,7 +637,7 @@ mod tests {
         let index = make_index(ls_tree_data, vec![]);
         let (hashes, to_hash) = index.get_package_hashes(&path("")).unwrap();
         assert_eq!(hashes.len(), 3);
-        assert_eq!(hashes.get(&path("a.ts")).unwrap(), "111");
+        assert_eq!(*hashes.get(&path("a.ts")).unwrap(), *pad_hex("111"));
         assert!(to_hash.is_empty());
     }
 
