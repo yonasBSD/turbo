@@ -65,6 +65,18 @@ and `rustls-tls` features.
 By default, the `rustls-tls` feature is selected so that `cargo build` works
 out of the box. If you wish to select `native-tls`, you may do so by running `cargo build --no-default-features --features native-tls`.
 
+### OpenTelemetry Observability
+
+Turborepo includes OpenTelemetry (OTel) support for exporting metrics in default builds.
+
+If you need to build without OTel support, use:
+
+```bash
+cargo build -p turbo --no-default-features --features rustls-tls
+```
+
+`experimentalObservability` is still gated by `futureFlags.experimentalObservability` in `turbo.json`.
+
 ## Running tests
 
 > [!IMPORTANT]
