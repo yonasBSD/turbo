@@ -286,17 +286,18 @@ fn test_run_summary_monorepo() {
         &["run", "build", "--summarize", "--", "someargs"],
     );
 
-    // Sleep for ksuid ordering
-    std::thread::sleep(std::time::Duration::from_secs(1));
-
     // Second run (cache hit)
     run_turbo(
         tempdir.path(),
         &["run", "build", "--summarize", "--", "someargs"],
     );
 
-    let summaries = read_run_summaries(tempdir.path());
+    let mut summaries = read_run_summaries(tempdir.path());
     assert_eq!(summaries.len(), 2);
+
+    // Sort by cached count so first=miss (0 cached), second=hit (2 cached).
+    // This avoids relying on ksuid timestamp ordering which needs a 1s sleep.
+    summaries.sort_by_key(|s| s["execution"]["cached"].as_u64().unwrap_or(0));
 
     let first = &summaries[0];
     let second = &summaries[1];
@@ -321,7 +322,10 @@ fn test_run_summary_monorepo() {
 
     assert_eq!(first_app["execution"]["exitCode"], 0);
     assert_eq!(first_app["cliArguments"], serde_json::json!(["someargs"]));
-    assert_eq!(first_app["hashOfExternalDependencies"], "459c029558afe716");
+    insta::assert_snapshot!(
+        "external_deps_hash",
+        first_app["hashOfExternalDependencies"].as_str().unwrap()
+    );
 
     // First run: MISS, second run: HIT
     assert_eq!(first_app["cache"]["status"], "MISS");

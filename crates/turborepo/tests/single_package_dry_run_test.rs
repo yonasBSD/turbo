@@ -29,6 +29,12 @@ fn test_single_package_dry_run_pnpm() {
         "dry-run with pnpm should succeed, stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        !json["tasks"].as_array().unwrap().is_empty(),
+        "expected at least one task in dry-run output"
+    );
 }
 
 #[test]
